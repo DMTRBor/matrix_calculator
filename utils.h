@@ -1,5 +1,5 @@
-#ifndef __INPUT__H__
-#define __INPUT__H__
+#ifndef __UTILS__H__
+#define __UTILS__H__
 
 
 #define MAX_INPUT_LEN 200
