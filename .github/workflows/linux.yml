@@ -1,0 +1,64 @@
+name: C (make) CI
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Show runner OS info
+        run: |
+          uname -a
+          lsb_release -a || true
+
+      - name: Install build tools (gcc, make)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      # On Linux, this is generally less critical than on Windows,
+      # but we can ensure Unix line endings just in case the file was checked out as CRLF.
+      - name: Normalize input file (Ensure LF line endings)
+        run: |
+          if [ -f test/valid_inputs.txt ]; then
+            # Convert any Windows CRLF endings to Linux LF endings
+            tr -d '\r' < test/valid_inputs.txt > temp_input.txt
+            mv temp_input.txt test/valid_inputs.txt
+            echo "Input file normalized to LF line endings."
+          fi
+
+      - name: Build (GCC)
+        # Use GCC with the C89 flags, compiling all source files into the binary 'mainmat'.
+        run: |
+          # Clean and compile directly using gcc
+          rm -f mainmat *.o || true
+          gcc -std=c89 -pedantic -Wall mainmat.c utils.c mymat.c -o mainmat
+
+      - name: Run tests / sample run
+        if: always()
+        run: |
+          # Check for the Linux executable named 'mainmat'
+          if [ -x ./mainmat ]; then
+            echo "./mainmat executable found"
+          else
+            echo "./mainmat not found or not executable"
+            ls -la
+          fi
+
+      - name: Upload build artifacts (optional)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # The artifact name can remain the same, but the paths change
+          name: mainmat-build-linux
+          path: |
+            ./mainmat
+            ./*.o

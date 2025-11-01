@@ -1,0 +1,85 @@
+name: C (MSVC) CI
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Show runner info
+        run: |
+          systeminfo
+          echo %PROCESSOR_ARCHITECTURE%
+
+      - name: Normalize input files (Dynamic Strip BOM)
+        shell: powershell
+        run: |
+          # Find all .txt files in the 'test\' directory
+          $files = Get-ChildItem -Path test\ -Filter "*.txt" -Recurse
+          
+          foreach ($file in $files) {
+            if (Test-Path -Path $file.FullName) {
+              Write-Host "Normalizing $($file.FullName)..."
+              # Read raw content, enforce Windows CRLF line endings
+              $content = (Get-Content -Path $file.FullName -Raw) -replace "`r`n", "`n" -replace "`n", "`r`n"
+              # Write back using ASCII encoding to strip any leading BOM characters.
+              $content | Out-File -FilePath $file.FullName -Encoding ASCII
+            }
+          }
+      # ----------------------------------------------------------------------
+
+      - name: Build mainmat.exe
+        shell: cmd
+        run: |
+          REM Activate the Visual Studio build environment for x64 architecture.
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
+
+          REM Compile all C sources into mainmat.exe
+          cl /nologo /W4 /EHsc /std:c89 mainmat.c utils.c mymat.c
+
+      - name: Run tests / sample run (Dynamic)
+        shell: cmd
+        run: |
+          SET EXECUTABLE=mainmat.exe
+          SET TEST_DIR=test\
+          
+          if exist %EXECUTABLE% (
+            echo Found %EXECUTABLE%. Starting dynamic tests...
+            
+            REM Use FOR /R to loop through all .txt files in the test directory and subdirectories.
+            FOR /R %TEST_DIR% %%f IN (*.txt) DO (
+                echo ====================================================
+                echo --- Running test with input file: %%f ---
+                echo ====================================================
+                
+                echo Output from %EXECUTABLE%:
+                REM Redirect the file content as standard input
+                %EXECUTABLE% < %%f
+                echo.
+            )
+            
+            echo ----------------------------------------------------
+            echo All tests finished.
+            
+          ) else (
+            echo %EXECUTABLE% not found or not executable
+            dir
+            exit 1
+          )
+      # -----------------------------------------------------------------------
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mainmat-build
+          path: |
+            mainmat.exe
+            *.obj
